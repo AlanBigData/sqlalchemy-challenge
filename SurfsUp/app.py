@@ -1,23 +1,23 @@
 # Imports:
 import numpy as np
-import sqlalchemy
+import os
+from sqlalchemy import create_engine, func
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, func
 from flask import Flask, jsonify
-import datetime as dt
 
 # Set up database connection:
-engine = create_engine("sqlite:///hawaii.sqlite")
+engine_str = f'sqlite:///{os.path.join(os.path.dirname(os.path.abspath(__file__)), "hawaii.sqlite")}'
+engine = create_engine(engine_str)
+
 Base = automap_base()
-Base.prepare(engine, reflect=True)
+Base.prepare(autoload_with=engine)
 Measurement = Base.classes.measurement
-Stations = Base.classes.stations
 
 # Set up Flask:
 app = Flask(__name__)
 
-# Define routesL
+# Define routes:
 
 
 @app.route("/")
@@ -41,7 +41,7 @@ def precipitation():
     # Query for the last 12 months of precipitation data:
     results = session.query(Measurement.date, Measurement.prcp).\
         filter(Measurement.date >= '2017-08-23').\
-        filter(Measurement.date <= '2016-08-23').all()
+        filter(Measurement.date <= '2017-08-23').all()
     session.close()
 
     # Convert the query results to a dictionary with date as the key and prcp as the value:
@@ -72,8 +72,8 @@ def tobs():
     # Then query temperature observations for the previous year for that station
     results = session.query(Measurement.date, Measurement.tobs).\
         filter(Measurement.station == 'USC00519281').\
-        filter(Measurement.date >= '2017-08-23').\
-        filter(Measurement.date <= '2016-08-23').all()
+        filter(Measurement.date >= '2016-08-23').\
+        filter(Measurement.date <= '2017-08-23').all()
     session.close()
 
     # Convert the query results to a list of dictionaries:
@@ -89,7 +89,8 @@ def temperature_start(start):
     session = Session(engine)
 
     # Query for TMIN, TAVG, and TMAX
-    results = session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).\
+    results = session.query(func.min(Measurement.tobs), func.avg(
+        Measurement.tobs), func.max(Measurement.tobs)).\
         filter(Measurement.date >= start).all()
 
     session.close()
@@ -107,15 +108,22 @@ def temperature_start(start):
 @app.route("/api/v1.0/<start>/<end>")
 def temperature_range(start, end):
     """Return JSON list of TMIN, TAVG, and TMAX for the date range."""
-    # Session Start:
     session = Session(engine)
 
-    # Close Session:
+    # Query for TMIN, TAVG, and TMAX for the date range
+    results = session.query(func.min(Measurement.tobs), func.avg(
+        Measurement.tobs), func.max(Measurement.tobs)).\
+        filter(Measurement.date >= start).\
+        filter(Measurement.date <= end).all()
+
     session.close()
 
-    # Convert the query results to a dictionary:
-    temperature_data = {"TMIN": min(Measurement.tobs), "TAVG": np.mean(
-        Measurement.tobs), "TMAX": max(Measurement.tobs)}
+    # Convert the query results to a dictionary
+    temperature_data = {
+        "TMIN": results[0][0],
+        "TAVG": results[0][1],
+        "TMAX": results[0][2]
+    }
 
     return jsonify(temperature_data)
 
